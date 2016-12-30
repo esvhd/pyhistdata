@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import time
 import os
+import pytz
+import joblib as job
+import matplotlib.pyplot as plt
 
 
 HEADERS = ['open', 'high', 'low', 'close', 'volume']
@@ -52,7 +55,21 @@ def read_fx_csv(filename,
     return df
 
 
-def load_fx(pair, source_dir, verbose=False, compression='infer'):
+def correct_errors(df, fx_pair, h5_file):
+    '''
+    Given a FX pair data, use exising HDFS5 data to drop some bad points.
+
+    TODO: use either a dataframe or file_path for h5_file.
+
+    '''
+    errors = pd.read_hdf(h5_file, key='errors', mode='a')
+    errors = errors.loc[errors.fx == fx_pair]
+    df_mod = df.drop(labels=errors.stamp, axis=0)
+    return df_mod
+
+
+def load_fx(pair, source_dir, verbose=False, compression='infer',
+            tz=None, errors_df=None):
     '''
     Load 1-minute bar data.
     '''
@@ -78,14 +95,26 @@ def load_fx(pair, source_dir, verbose=False, compression='infer'):
     combined.sort_index(inplace=True)
     t3 = time.process_time()
 
+    # convert timezone if needed.
+    if tz is not None:
+        zone = pytz.timezone(tz)
+        est_tz = pytz.timezone('US/Eastern')
+        est_stamps = [est_tz.localize(x) for x in combined.index]
+        new_stamps = [x.astimezone(zone) for x in est_stamps]
+        combined.index = new_stamps
+
+    if errors_df:
+        combined = correct_errors(combined, fx_pair=pair, h5_file=errors_df)
+
     if verbose:
         print('File Reading took: {:.3f}, per file: {:.3f} for {} files\n'
               'Concat df took: {:.3f}\n'
-              'Sort index too: {:.3f}'.format(t1 - t0,
-                                              (t1 - t0) / len(data),
-                                              len(data),
-                                              t2 - t1,
-                                              t3 - t2))
+              'Sort index took: {:.3f}'.format(t1 - t0,
+                                               (t1 - t0) / len(data),
+                                               len(data),
+                                               t2 - t1,
+                                               t3 - t2))
+
     return combined
 
 
@@ -93,3 +122,98 @@ def pct_outlier_check(df, col='close', threshold=.05):
     pct = df.pct_change()
     idx = df[col].loc[pct[col].abs() > threshold]
     return df.loc[idx.index]
+
+
+def _check_data(x, source_dir, threshold=.05):
+    fx = load_fx(x, source_dir=source_dir)
+    res = pct_outlier_check(fx, threshold=threshold)
+    return (x, res)
+
+
+def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False):
+    all_pairs = show_avail_m1_pairs(source_dir)
+    data_check = job.Parallel(n_jobs=n_jobs)(job.delayed(_check_data)
+                                             (x, source_dir=source_dir,
+                                              threshold=pct_threshold)
+                                             for x in all_pairs.keys())
+
+    focus = dict()
+    for x, df in data_check:
+        if len(df) > 0:
+            focus[x] = df
+            if verbose:
+                print('Found > {:.1%} jumps in data for {}, count = {}'
+                      .format(pct_threshold, x, len(df)))
+
+    if verbose:
+        print('total pairs = {}'.format(len(all_pairs)))
+        print('No. of pairs with potential data issue = {}'
+              .format(len(focus.keys())))
+
+    return focus
+
+
+def plot_subset(data, index, offset=10, col='close'):
+    '''
+    plot a subset of data points around each index value provided.
+
+    Parameters:
+    data:
+        data to plot
+    index:
+        set of index values to plot, a number of data points before and after
+        each index are also included.
+        Max allowed no. of indices is 10.
+    offset:
+        number of data points before and after the index value to include in
+        the plot.
+    col:
+        data column to plot. Default is 'close'
+    '''
+    # first validate index are all found in data's index
+    mask = index.isin(data.index)
+    if not mask.all():
+        raise AssertionError('index not found in data: {}'.format(index[mask]))
+    n = len(index)
+    if n > 10:
+        print('Too many indices to plot. Max = 10')
+        return
+    fig, axarr = plt.subplots(nrows=n, ncols=1)
+    w, h = plt.rcParams['figure.figsize']
+    fig.set_size_inches((w, n * h))
+
+    if n > 1:
+        i = 0
+        for ind in index:
+            iloc = data.index.get_loc(ind)
+            left = max(0, iloc - offset)
+            right = min(len(data) - 1, iloc + offset)
+            data.iloc[left:right].loc[:, col].plot(ax=axarr[i],
+                                                   ls='',
+                                                   marker='x')
+            if title is None:
+                axarr[i].set_title(ind)
+            else:
+                axarr[i].set_title('{}, {}'.format(title, ind))
+            i += 1
+        plt.tight_layout(h_pad=.4)
+    else:
+        # plot only 1 axes
+        iloc = data.index.get_loc(index[0])
+        left = max(0, iloc - offset)
+        right = min(len(data) - 1, iloc + offset)
+        data.iloc[left:right].loc[:, col].plot(ax=axarr, ls='', marker='x')
+        if title is None:
+            axarr.set_title(ind)
+        else:
+            axarr.set_title('{}, {}'.format(title, index[0]))
+    plt.show()
+    plt.close(fig)
+
+
+def plot_subset_fx(pair, source_dir, index, offset=10, col='close', tz=None):
+    '''
+    Load fx from csv data file and then run plot_subset.
+    '''
+    data = load_fx(pair=pair, source_dir=source_dir, verbose=False, tz=tz)
+    plot_subset(data, index, offset=offset, col=col)
