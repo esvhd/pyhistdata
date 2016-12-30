@@ -124,17 +124,22 @@ def pct_outlier_check(df, col='close', threshold=.05):
     return df.loc[idx.index]
 
 
-def _check_data(x, source_dir, threshold=.05):
-    fx = load_fx(x, source_dir=source_dir)
+def _check_data(x, source_dir, threshold=.05, errors_df=None):
+    '''
+    Helper function for using joblib in `data_check_all()`.
+    '''
+    fx = load_fx(x, source_dir=source_dir, errors_df=errors_df)
     res = pct_outlier_check(fx, threshold=threshold)
     return (x, res)
 
 
-def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False):
+def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False,
+                   errors_df=None):
     all_pairs = show_avail_m1_pairs(source_dir)
     data_check = job.Parallel(n_jobs=n_jobs)(job.delayed(_check_data)
                                              (x, source_dir=source_dir,
-                                              threshold=pct_threshold)
+                                              threshold=pct_threshold,
+                                              errors_df=errors_df)
                                              for x in all_pairs.keys())
 
     focus = dict()
@@ -142,8 +147,9 @@ def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False):
         if len(df) > 0:
             focus[x] = df
             if verbose:
-                print('Found > {:.1%} jumps in data for {}, count = {}'
-                      .format(pct_threshold, x, len(df)))
+                print('Found > {:.1%} jumps in data for {}, count = {}, '
+                      'max datetime = {}'
+                      .format(pct_threshold, x, len(df), df.index.max()))
 
     if verbose:
         print('total pairs = {}'.format(len(all_pairs)))
@@ -153,7 +159,7 @@ def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False):
     return focus
 
 
-def plot_subset(data, index, offset=10, col='close'):
+def plot_subset(data, index, offset=10, col='close', title=None):
     '''
     plot a subset of data points around each index value provided.
 
