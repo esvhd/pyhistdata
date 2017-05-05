@@ -55,14 +55,25 @@ def read_fx_csv(filename,
     return df
 
 
-def correct_errors(df, fx_pair, h5_file):
+def correct_errors(df, fx_pair, error_datastore):
     '''
     Given a FX pair data, use exising HDFS5 data to drop some bad points.
 
-    TODO: use either a dataframe or file_path for h5_file.
+    TODO: use either a dataframe or file_path for error_datastore.
 
+    Parameters:
+    df:
+        data in pandas dataframe
+    fx_pair:
+        fx cross, eg. AUDUSD
+    error_datastore:
+        HDF5 store file that contains error data. Assume key is 'errors'.
     '''
-    errors = pd.read_hdf(h5_file, key='errors', mode='a')
+    if isinstance(error_datastore, pd.DataFrame):
+        errors = error_datastore
+    else:
+        errors = pd.read_hdf(error_datastore, key='errors', mode='a')
+
     errors = errors.loc[errors.fx == fx_pair]
     df_mod = df.drop(labels=errors.stamp, axis=0)
     return df_mod
@@ -72,6 +83,16 @@ def load_fx(pair, source_dir, verbose=False, compression='infer',
             tz=None, errors_df=None):
     '''
     Load 1-minute bar data.
+
+    Parameters:
+    pair:
+        FX pair name
+    source_dir:
+        directory that contains all the CSV data files.
+    tz:
+        timezone adjustment
+    errors_df:
+        data source for error correction info.
     '''
     csv_files = (x for x in filter(
         lambda x: x.endswith('.csv.bz2'), os.listdir(source_dir)))
@@ -104,7 +125,9 @@ def load_fx(pair, source_dir, verbose=False, compression='infer',
         combined.index = new_stamps
 
     if errors_df:
-        combined = correct_errors(combined, fx_pair=pair, h5_file=errors_df)
+        combined = correct_errors(combined,
+                                  fx_pair=pair,
+                                  error_datastore=errors_df)
 
     if verbose:
         print('File Reading took: {:.3f}, per file: {:.3f} for {} files\n'
