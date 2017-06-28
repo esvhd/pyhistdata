@@ -8,11 +8,16 @@ import matplotlib.pyplot as plt
 
 
 HEADERS = ['open', 'high', 'low', 'close', 'volume']
+RESAMPLE_RULE = {'open': 'first',
+                 'high': 'max',
+                 'low': 'min',
+                 'close': 'last'}
+INVERSE_PAIRS = {'EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD'}
 
 
-def show_avail_m1_pairs(source_dir):
+def show_avail_m1_pairs(source_dir, file_ext='.csv'):
     csv_files = (x for x in filter(
-        lambda x: x.endswith('.csv.bz2'), os.listdir(source_dir)))
+        lambda x: x.endswith(file_ext), os.listdir(source_dir)))
     ascii_files = (x for x in filter(lambda x: x.startswith('DAT_ASCII_'),
                                      csv_files))
     m1_files = (x for x in filter(lambda x: '_M1_' in x, ascii_files))
@@ -55,6 +60,14 @@ def read_fx_csv(filename,
     return df
 
 
+def read_errors(error_datasore):
+    if isinstance(error_datastore, pd.DataFrame):
+        errors = error_datastore
+    else:
+        errors = pd.read_hdf(error_datastore, key='errors', mode='a')
+    return errors
+
+
 def correct_errors(df, fx_pair, error_datastore):
     '''
     Given a FX pair data, use exising HDFS5 data to drop some bad points.
@@ -75,12 +88,60 @@ def correct_errors(df, fx_pair, error_datastore):
         errors = pd.read_hdf(error_datastore, key='errors', mode='a')
 
     errors = errors.loc[errors.fx == fx_pair]
-    df_mod = df.drop(labels=errors.stamp, axis=0)
+    # make sure all stamps to drop are in the source frame's index.
+    flag = errors.stamp.isin(df.index)
+    df_mod = df.drop(labels=errors.stamp[flag], axis=0)
     return df_mod
 
 
-def load_fx(pair, source_dir, verbose=False, compression='infer',
-            tz=None, errors_df=None):
+def load_fx_usd(pair, source_dir,
+                compression='infer',
+                tz=None, errors_df=None, file_ext='.csv',
+                verbose=False):
+    '''
+    Load FX pair using usd crosses.
+    '''
+    if 'USD' in pair:
+        return load_fx(pair=pair,
+                       source_dir=source_dir,
+                       compression=compression,
+                       tz=tz, errors_df=errors_df, file_ext=file_ext,
+                       verbose=verbose)
+    else:
+        # use USD crosses.
+        ccy1, ccy2 = pair[0:3], pair[3:]
+        if ccy1 in INVERSE_PAIRS:
+            ccy1 = f'{ccy1}USD'
+        else:
+            ccy1 = f'USD{ccy1}'
+
+        if ccy2 in INVERSE_PAIRS:
+            ccy2 = f'{ccy2}USD'
+        else:
+            ccy2 = f'USD{ccy2}'
+
+        # load fx
+
+        # join
+
+        # calc crosses
+
+        # remove nulls
+
+        # return results
+    pass
+
+
+def conv_tz(dtime, dest_tz):
+    if dtime is None:
+        return None
+    return pd.datetime.fromtimestamp(dtime.timestamp(), dest_tz)
+
+
+def load_fx(pair, source_dir,
+            compression='infer',
+            tz=None, errors_df=None, file_ext='.csv',
+            verbose=False):
     '''
     Load 1-minute bar data.
 
@@ -95,7 +156,7 @@ def load_fx(pair, source_dir, verbose=False, compression='infer',
         data source for error correction info.
     '''
     csv_files = (x for x in filter(
-        lambda x: x.endswith('.csv.bz2'), os.listdir(source_dir)))
+        lambda x: x.endswith(file_ext), os.listdir(source_dir)))
     ascii_files = (x for x in filter(lambda x: x.startswith('DAT_ASCII_'),
                                      csv_files))
     m1_files = (x for x in filter(lambda x: '_M1_' in x, ascii_files))
@@ -118,11 +179,19 @@ def load_fx(pair, source_dir, verbose=False, compression='infer',
 
     # convert timezone if needed.
     if tz is not None:
+        # fast version
         zone = pytz.timezone(tz)
-        est_tz = pytz.timezone('US/Eastern')
-        est_stamps = [est_tz.localize(x) for x in combined.index]
-        new_stamps = [x.astimezone(zone) for x in est_stamps]
-        combined.index = new_stamps
+        new_stamp = [conv_tz(x, zone) for x in combined.index]
+        combined.index = new_stamp
+        # slow version
+        # zone = pytz.timezone(tz)
+        # est_tz = pytz.timezone('US/Eastern')
+        # est_stamps = [est_tz.localize(x) for x in combined.index]
+        # if tz != 'US/Eastern':
+        #     new_stamps = [x.astimezone(zone) for x in est_stamps]
+        #     combined.index = new_stamps
+        # else:
+        #     combined.index = est_stamps
 
     if errors_df:
         combined = correct_errors(combined,
@@ -141,26 +210,36 @@ def load_fx(pair, source_dir, verbose=False, compression='infer',
     return combined
 
 
+def resample(df, rule, how=RESAMPLE_RULE):
+    '''
+    Resample OHLC based on given rule.
+    '''
+    return df.resample(rule=rule).apply(how)
+
+
 def pct_outlier_check(df, col='close', threshold=.05):
     pct = df.pct_change()
     idx = df[col].loc[pct[col].abs() > threshold]
     return df.loc[idx.index]
 
 
-def _check_data(x, source_dir, threshold=.05, errors_df=None):
+def _check_data(x, source_dir, field='close', threshold=.05, errors_df=None):
     '''
     Helper function for using joblib in `data_check_all()`.
     '''
     fx = load_fx(x, source_dir=source_dir, errors_df=errors_df)
-    res = pct_outlier_check(fx, threshold=threshold)
+    res = pct_outlier_check(fx, col=field, threshold=threshold)
     return (x, res)
 
 
-def data_check_all(source_dir, n_jobs=4, pct_threshold=.05, verbose=False,
+def data_check_all(source_dir, n_jobs=4,
+                   field='close',
+                   pct_threshold=.05, verbose=False,
                    errors_df=None):
     all_pairs = show_avail_m1_pairs(source_dir)
     data_check = job.Parallel(n_jobs=n_jobs)(job.delayed(_check_data)
                                              (x, source_dir=source_dir,
+                                              field=field,
                                               threshold=pct_threshold,
                                               errors_df=errors_df)
                                              for x in all_pairs.keys())
@@ -233,7 +312,7 @@ def plot_subset(data, index, offset=10, col='close', title=None):
         right = min(len(data) - 1, iloc + offset)
         data.iloc[left:right].loc[:, col].plot(ax=axarr, ls='', marker='x')
         if title is None:
-            axarr.set_title(ind)
+            axarr.set_title(index[0])
         else:
             axarr.set_title('{}, {}'.format(title, index[0]))
     plt.show()

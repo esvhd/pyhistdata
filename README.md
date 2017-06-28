@@ -7,3 +7,11 @@ and including 2015 data. This is unofficial and incomplete, please use at
 your own risk.
 
 AUDJPY data has some problems before 2005-05-16.
+
+
+# Plotting
+
+To plot minute level data, `datashader` is required.
+
+    conda install datashader
+
