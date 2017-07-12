@@ -5,6 +5,7 @@ import os
 import pytz
 import joblib as job
 import matplotlib.pyplot as plt
+import xarray as xr
 
 
 HEADERS = ['open', 'high', 'low', 'close', 'volume']
@@ -33,6 +34,12 @@ def show_avail_m1_pairs(source_dir, file_ext='.csv'):
         pairs[fx] = years
 
     return pairs
+
+
+def get_usd_keys(CSV_DIR, file_ext='.csv'):
+    pairs = show_avail_m1_pairs(source_dir=CSV_DIR, file_ext=file_ext)
+    usd_keys = [x for x in filter(lambda x: 'USD' in x, all_pairs.keys())]
+    return usd_keys
 
 
 def read_fx_csv(filename,
@@ -94,42 +101,36 @@ def correct_errors(df, fx_pair, error_datastore):
     return df_mod
 
 
-def load_fx_usd(pair, source_dir,
+def load_usd_fx(pair, source_dir,
+                n_jobs=10,
                 compression='infer',
                 tz=None, errors_df=None, file_ext='.csv',
                 verbose=False):
     '''
     Load FX pair using usd crosses.
     '''
-    if 'USD' in pair:
-        return load_fx(pair=pair,
-                       source_dir=source_dir,
-                       compression=compression,
-                       tz=tz, errors_df=errors_df, file_ext=file_ext,
-                       verbose=verbose)
-    else:
-        # use USD crosses.
-        ccy1, ccy2 = pair[0:3], pair[3:]
-        if ccy1 in INVERSE_PAIRS:
-            ccy1 = f'{ccy1}USD'
-        else:
-            ccy1 = f'USD{ccy1}'
+    usd_keys = get_usd_keys(CSV_DIR=source_dir, file_ext=file_ext)
 
-        if ccy2 in INVERSE_PAIRS:
-            ccy2 = f'{ccy2}USD'
-        else:
-            ccy2 = f'USD{ccy2}'
+    if verbose:
+        print('Loading {} FX crosses with {} CPU cores...'
+              .format(len(usd_keys), n_jobs))
 
-        # load fx
+    # load in parallel
+    l = (joblib.Parallel(n_jobs=n_jobs)
+         (joblib.delayed(phd.load_fx)(f,
+                                      source_dir=CSV_DIR,
+                                      errors_df=error_file)
+          for f in usd_keys))
 
-        # join
+    # convert all dataframes to xr.DataArray
+    dsl = [xr.DataArray(z, coords=[z.index, z.columns],
+                        dims=['Datetime', 'column'])
+           for z in l]
 
-        # calc crosses
+    # convert to Dataset
+    ds = xr.Dataset(dict(zip(usd_keys, dsl)))
 
-        # remove nulls
-
-        # return results
-    pass
+    return ds
 
 
 def conv_tz(dtime, dest_tz):
