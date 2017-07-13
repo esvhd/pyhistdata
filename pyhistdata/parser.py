@@ -37,7 +37,7 @@ def show_avail_m1_pairs(source_dir, file_ext='.csv'):
 
 
 def get_usd_keys(CSV_DIR, file_ext='.csv'):
-    pairs = show_avail_m1_pairs(source_dir=CSV_DIR, file_ext=file_ext)
+    all_pairs = show_avail_m1_pairs(source_dir=CSV_DIR, file_ext=file_ext)
     usd_keys = [x for x in filter(lambda x: 'USD' in x, all_pairs.keys())]
     return usd_keys
 
@@ -101,13 +101,36 @@ def correct_errors(df, fx_pair, error_datastore):
     return df_mod
 
 
-def load_usd_fx(pair, source_dir,
+def load_usd_fx(source_dir,
                 n_jobs=10,
                 compression='infer',
-                tz=None, errors_df=None, file_ext='.csv',
+                tz=None,
+                errors_df=None,
+                file_ext='.csv',
                 verbose=False):
     '''
     Load FX pair using usd crosses.
+
+    Parameters:
+    ------------------------
+    source_dir:
+        directory that holds all data files
+    n_jobs:
+        how many CPU cores, default 10
+    compression:
+        data file compression method, default 'infer'
+    tz:
+        time zone, default None, implying no time zone info. Adding time
+        zone is a time consuming operation.
+    errors_df:
+        file or dataframe that contains bad data points to be corrected.
+    file_ext:
+        file extension, default '.csv'
+    verbose:
+        default False, whether to print messages.
+
+    Returns:
+        xarray Dataset that contains all USD crosses.
     '''
     usd_keys = get_usd_keys(CSV_DIR=source_dir, file_ext=file_ext)
 
@@ -116,10 +139,10 @@ def load_usd_fx(pair, source_dir,
               .format(len(usd_keys), n_jobs))
 
     # load in parallel
-    l = (joblib.Parallel(n_jobs=n_jobs)
-         (joblib.delayed(phd.load_fx)(f,
-                                      source_dir=CSV_DIR,
-                                      errors_df=error_file)
+    l = (job.Parallel(n_jobs=n_jobs)
+         (job.delayed(load_fx)(f,
+                               source_dir=source_dir,
+                               errors_df=errors_df)
           for f in usd_keys))
 
     # convert all dataframes to xr.DataArray
