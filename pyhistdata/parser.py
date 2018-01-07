@@ -17,6 +17,16 @@ INVERSE_PAIRS = {'EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD'}
 
 
 def show_avail_m1_pairs(source_dir, file_ext='.csv'):
+    '''
+    Given a directory, list all FX pairs based on file name pattern.
+
+    Args:
+        source_dir (str): filepath directory
+        file_ext (str, optional): default '.csv'
+
+    Returns:
+        dictionary of fx pairs and the list of years for which data exists.
+    '''
     csv_files = (x for x in filter(
         lambda x: x.endswith(file_ext), os.listdir(source_dir)))
     ascii_files = (x for x in filter(lambda x: x.startswith('DAT_ASCII_'),
@@ -36,9 +46,25 @@ def show_avail_m1_pairs(source_dir, file_ext='.csv'):
     return pairs
 
 
-def get_usd_keys(CSV_DIR, file_ext='.csv'):
+def get_usd_keys(CSV_DIR, file_ext='.csv',
+                 ignore={'NSXUSD', 'XAUUSD', 'XAGUSD', 'UDXUSD', 'USDHKD',
+                         'WTIUSD', 'SPXUSD', 'BCOUSD'}):
+    '''
+    Return a list of USD FX crosses.
+
+    Args:
+        CSV_DIR (str): file directory
+        file_ext (str, optional): default '.csv'
+        ignore (set, optional): pairs to ignore.
+
+    Returns:
+        list of FX pairs
+    '''
+    if ignore is None:
+        ignore = {}
     all_pairs = show_avail_m1_pairs(source_dir=CSV_DIR, file_ext=file_ext)
-    usd_keys = [x for x in filter(lambda x: 'USD' in x, all_pairs.keys())]
+    usd_keys = [x for x in filter(lambda x: 'USD' in x and x not in ignore,
+                                  all_pairs.keys())]
     return usd_keys
 
 
@@ -67,7 +93,16 @@ def read_fx_csv(filename,
     return df
 
 
-def read_errors(error_datasore):
+def read_errors(error_datastore):
+    '''
+    Load error corrections.
+
+    Args:
+        error_datastore (str or DataFrame): error data
+
+    Returns:
+        DataFrame, error correction data
+    '''
     if isinstance(error_datastore, pd.DataFrame):
         errors = error_datastore
     else:
@@ -82,12 +117,14 @@ def correct_errors(df, fx_pair, error_datastore):
     TODO: use either a dataframe or file_path for error_datastore.
 
     Parameters:
-    df:
-        data in pandas dataframe
-    fx_pair:
-        fx cross, eg. AUDUSD
-    error_datastore:
-        HDF5 store file that contains error data. Assume key is 'errors'.
+        df (DataFrame): data in pandas dataframe
+        fx_pair (str): FX pair name
+        error_datastore (str or DataFrame): error data, either path to HDF5
+        store file that contains error data, or data frame.
+        Assume key is 'errors'.
+
+    Returns:
+        DataFrame, error corrected data.
     '''
     if isinstance(error_datastore, pd.DataFrame):
         errors = error_datastore
@@ -112,22 +149,14 @@ def load_usd_fx(source_dir,
     Load FX pair using usd crosses.
 
     Parameters:
-    ------------------------
-    source_dir:
-        directory that holds all data files
-    n_jobs:
-        how many CPU cores, default 10
-    compression:
-        data file compression method, default 'infer'
-    tz:
-        time zone, default None, implying no time zone info. Adding time
-        zone is a time consuming operation.
-    errors_df:
-        file or dataframe that contains bad data points to be corrected.
-    file_ext:
-        file extension, default '.csv'
-    verbose:
-        default False, whether to print messages.
+        source_dir (str): directory that holds all data files
+        n_jobs (int): how many CPU cores, default 10
+        compression (str, optional): compression format, default 'infer'
+        tz (str, optional): time zone, default None, implying no time zone
+        info. Adding time zone is a time consuming operation.
+        errors_df (None, optional): error correction data or file path
+        file_ext (str, optional): default '.csv'
+        verbose (bool, optional): default False
 
     Returns:
         xarray Dataset that contains all USD crosses.
@@ -170,14 +199,17 @@ def load_fx(pair, source_dir,
     Load 1-minute bar data.
 
     Parameters:
-    pair:
-        FX pair name
-    source_dir:
-        directory that contains all the CSV data files.
-    tz:
-        timezone adjustment
-    errors_df:
-        data source for error correction info.
+        pair (str): FX pair name
+        source_dir (str): directory that contains all the CSV data files.
+        compression (str, optional): compression format, default None.
+        tz (str, optional): timezone adjustment, default None
+        errors_df (str or dataframe, optional): data source for error
+        correction info.
+        file_ext (str, optional): default '.csv'
+        verbose (bool, optional): Default False
+
+    Returns:
+        DataFrame
     '''
     csv_files = (x for x in filter(
         lambda x: x.endswith(file_ext), os.listdir(source_dir)))
@@ -237,6 +269,14 @@ def load_fx(pair, source_dir,
 def resample(df, rule, how=RESAMPLE_RULE):
     '''
     Resample OHLC based on given rule.
+
+    Args:
+        df (DataFrame): fx data
+        rule (TYPE): resample frequency
+        how (TYPE, optional): Default OHLC, see docs.
+
+    Returns:
+        DataFrame
     '''
     return df.resample(rule=rule).apply(how)
 
