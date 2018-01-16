@@ -12,7 +12,8 @@ HEADERS = ['open', 'high', 'low', 'close', 'volume']
 RESAMPLE_RULE = {'open': 'first',
                  'high': 'max',
                  'low': 'min',
-                 'close': 'last'}
+                 'close': 'last',
+                 'volume': 'sum'}
 INVERSE_PAIRS = {'EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD'}
 
 
@@ -77,6 +78,24 @@ def read_fx_csv(filename,
                 source_dir,
                 drop_dup=False,
                 compression=None):
+    '''
+    Load a given csv data file.
+
+    Parameters
+    ----------
+    filename : str
+        data file, must be .csv
+    source_dir : str
+        data file residing directory
+    drop_dup : bool, optional
+        default False, drop duplicates
+    compression : None or str, optional
+        compression format, default None.
+
+    Returns
+    -------
+    TYPE
+    '''
     df = pd.read_csv(os.path.join(source_dir, filename),
                      sep=';',
                      index_col=[0],
@@ -211,7 +230,9 @@ def conv_tz(dtime, dest_tz):
 
 def load_fx(pair, source_dir,
             compression='infer',
-            tz=None, errors_df=None, file_ext='.csv',
+            tz=None,
+            errors_df=None,
+            file_ext='.csv',
             verbose=False):
     '''
     Load 1-minute bar data.
@@ -419,6 +440,24 @@ def plot_subset(data, index, offset=10, col='close', title=None):
 def plot_subset_fx(pair, source_dir, index, offset=10, col='close', tz=None):
     '''
     Load fx from csv data file and then run plot_subset.
+
+    Parameters
+    ----------
+    pair : str
+        FX pair name, e.g. USDGBP
+    source_dir : str
+        folder path for csv data files
+    index : list-like
+        set of index values to plot, a number of data points before and
+        after each index are also included. Max allowed no. of indices is 10.
+    offset : int, optional
+        number of data points before and after the index value to
+        include in the plot.
+    col : str, optional
+        data column to plot. Default is 'close', can be one of
+        {'open', 'high', 'low', 'close'}
+    tz : None or str, optional
+        timezone, default None
     '''
     data = load_fx(pair=pair, source_dir=source_dir, verbose=False, tz=tz)
     plot_subset(data, index, offset=offset, col=col)
