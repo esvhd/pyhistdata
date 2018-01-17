@@ -49,9 +49,9 @@ def show_avail_m1_pairs(source_dir, file_ext='.csv'):
     return pairs
 
 
-def get_usd_keys(CSV_DIR, file_ext='.csv',
+def get_usd_keys(CSV_DIR, cross='USD', file_ext='.csv',
                  ignore={'NSXUSD', 'XAUUSD', 'XAGUSD', 'UDXUSD', 'USDHKD',
-                         'WTIUSD', 'SPXUSD', 'BCOUSD'}):
+                         'WTIUSD', 'BCOUSD'}):
     '''
     Return a list of USD FX crosses.
 
@@ -69,7 +69,7 @@ def get_usd_keys(CSV_DIR, file_ext='.csv',
     if ignore is None:
         ignore = {}
     all_pairs = show_avail_m1_pairs(source_dir=CSV_DIR, file_ext=file_ext)
-    usd_keys = [x for x in filter(lambda x: 'USD' in x and x not in ignore,
+    usd_keys = [x for x in filter(lambda x: cross in x and x not in ignore,
                                   all_pairs.keys())]
     return usd_keys
 
@@ -169,6 +169,7 @@ def correct_errors(df, fx_pair, error_datastore):
 
 
 def load_usd_fx(source_dir,
+                cross='USD',
                 n_jobs=10,
                 compression='infer',
                 tz=None,
@@ -198,26 +199,26 @@ def load_usd_fx(source_dir,
     Returns:
         xarray Dataset that contains all USD crosses.
     '''
-    usd_keys = get_usd_keys(CSV_DIR=source_dir, file_ext=file_ext)
+    fx_keys = get_usd_keys(CSV_DIR=source_dir, cross=cross, file_ext=file_ext)
 
     if verbose:
         print('Loading {} FX crosses with {} CPU cores...'
-              .format(len(usd_keys), n_jobs))
+              .format(len(fx_keys), n_jobs))
 
     # load in parallel
-    l = (job.Parallel(n_jobs=n_jobs)
-         (job.delayed(load_fx)(f,
-                               source_dir=source_dir,
-                               errors_df=errors_df)
-          for f in usd_keys))
+    lfx = (job.Parallel(n_jobs=n_jobs)
+           (job.delayed(load_fx)(f,
+                                 source_dir=source_dir,
+                                 errors_df=errors_df)
+            for f in fx_keys))
 
     # convert all dataframes to xr.DataArray
     dsl = [xr.DataArray(z, coords=[z.index, z.columns],
                         dims=['Datetime', 'column'])
-           for z in l]
+           for z in lfx]
 
     # convert to Dataset
-    ds = xr.Dataset(dict(zip(usd_keys, dsl)))
+    ds = xr.Dataset(dict(zip(fx_keys, dsl)))
 
     return ds
 
