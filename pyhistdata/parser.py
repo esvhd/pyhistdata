@@ -21,14 +21,16 @@ def show_avail_m1_pairs(source_dir, file_ext='.csv'):
     '''
     Given a directory, list all FX pairs based on file name pattern.
 
-    Args:
-        source_dir (str):
-            filepath directory
-        file_ext (str, optional):
-            default '.csv'
+    Parameters
+    ----------
+    source_dir : str
+        filepath directory
+    file_ext : str, optional
+        default '.csv'
 
-    Returns:
-        dictionary of fx pairs and the list of years for which data exists.
+    Returns
+    -------
+    dictionary of fx pairs and the list of years for which data exists.
     '''
     csv_files = (x for x in filter(
         lambda x: x.endswith(file_ext), os.listdir(source_dir)))
@@ -55,16 +57,20 @@ def get_usd_keys(CSV_DIR, cross='USD', file_ext='.csv',
     '''
     Return a list of USD FX crosses.
 
-    Args:
-        CSV_DIR (str):
-            file directory
-        file_ext (str, optional):
-            default '.csv'
-        ignore (set, optional):
-            pairs to ignore.
+    Parameters
+    ----------
+    CSV_DIR : str
+        file directory
+    cross : str, optional
 
-    Returns:
-        list of FX pairs
+    file_ext : str, optional
+        default '.csv'
+    ignore : set, optional
+        pairs to ignore.
+
+    Returns
+    -------
+    list of FX pairs
     '''
     if ignore is None:
         ignore = {}
@@ -94,7 +100,7 @@ def read_fx_csv(filename,
 
     Returns
     -------
-    TYPE
+    DataFrame
     '''
     df = pd.read_csv(os.path.join(source_dir, filename),
                      sep=';',
@@ -121,13 +127,15 @@ def read_errors(error_datastore):
     '''
     Load error corrections.
 
-    Args:
-        error_datastore (str or DataFrame):
-            error data
+    Parameters
+    ----------
+    error_datastore : str or DataFrame
+        error data
 
-    Returns:
-        DataFrame:
-            error correction data
+    Returns
+    -------
+    DataFrame
+        error correction data
     '''
     if isinstance(error_datastore, pd.DataFrame):
         errors = error_datastore
@@ -140,21 +148,24 @@ def correct_errors(df, fx_pair, error_datastore):
     '''
     Given a FX pair data, use exising HDFS5 data to drop some bad points.
 
-    TODO:
+    TODO
+    ----
     * use either a dataframe or file_path for error_datastore.
 
-    Parameters:
-        df (DataFrame):
-            data in pandas dataframe
-        fx_pair (str):
-            FX pair name
-        error_datastore (str or DataFrame):
-            Error data, either path to HDF5 store file that contains error
-            data, or data frame. Assume key is 'errors'.
+    Parameters
+    ----------
+    df : DataFrame
+        data in pandas dataframe
+    fx_pair : str
+        FX pair name
+    error_datastore : str or DataFrame
+        Error data, either path to HDF5 store file that contains error
+        data, or data frame. Assume key is 'errors'.
 
-    Returns:
-        DataFrame:
-            error corrected data.
+    Returns
+    -------
+    DataFrame
+        error corrected data.
     '''
     if isinstance(error_datastore, pd.DataFrame):
         errors = error_datastore
@@ -168,36 +179,41 @@ def correct_errors(df, fx_pair, error_datastore):
     return df_mod
 
 
-def load_usd_fx(source_dir,
-                cross='USD',
-                n_jobs=10,
-                compression='infer',
-                tz=None,
-                errors_df=None,
-                file_ext='.csv',
-                verbose=False):
+def load_fx_multi(source_dir,
+                  cross='USD',
+                  n_jobs=10,
+                  compression='infer',
+                  tz=None,
+                  errors_df=None,
+                  file_ext='.csv',
+                  verbose=False):
     '''
     Load FX pair using usd crosses.
 
-    Parameters:
-        source_dir (str):
-            directory that holds all data files
-        n_jobs (int):
-            how many CPU cores, default 10
-        compression (str, optional):
-            compression format, default 'infer'
-        tz (str, optional):
-            time zone, default None, implying no time zone info.
-            Adding time zone is a time consuming operation.
-        errors_df (None, optional):
-            error correction data or file path
-        file_ext (str, optional):
-            default '.csv'
-        verbose (bool, optional):
-            default False
+    Parameters
+    ----------
+    source_dir : str
+        directory that holds all data files
+    cross : str, optional
+        Default USD, loads a set of FX crosses, e.g. USD crosses or EUR
+        crosses.
+    n_jobs : int
+        how many CPU cores, default 10
+    compression : str, optional
+        compression format, default 'infer'
+    tz : str, optional
+        time zone, default None, implying no time zone info.
+        Adding time zone is a time consuming operation.
+    errors_df : None, optional
+        error correction data or file path
+    file_ext : str, optional
+        default '.csv'
+    verbose : bool, optional
+        default False
 
-    Returns:
-        xarray Dataset that contains all USD crosses.
+    Returns
+    -------
+    xarray Dataset that contains all USD or EUR crosses.
     '''
     fx_keys = get_usd_keys(CSV_DIR=source_dir, cross=cross, file_ext=file_ext)
 
@@ -238,24 +254,26 @@ def load_fx(pair, source_dir,
     '''
     Load 1-minute bar data.
 
-    Parameters:
-        pair (str):
-            FX pair name
-        source_dir (str):
-            directory that contains all the CSV data files.
-        compression (str, optional):
-            compression format, default None.
-        tz (str, optional):
-            timezone adjustment, default None
-        errors_df (str or dataframe, optional):
-            data source for error correction info.
-        file_ext (str, optional):
-            default '.csv'
-        verbose (bool, optional):
-            Default False
+    Parameters
+    ----------
+    pair : str
+        FX pair name
+    source_dir : str
+        directory that contains all the CSV data files.
+    compression : str, optional
+        compression format, default None.
+    tz : str, optional
+        timezone adjustment, default None
+    errors_df : str or dataframe, optional
+        data source for error correction info.
+    file_ext : str, optional
+        default '.csv'
+    verbose : bool, optional
+        Default False
 
-    Returns:
-        DataFrame
+    Returns
+    -------
+    DataFrame
     '''
     csv_files = (x for x in filter(
         lambda x: x.endswith(file_ext), os.listdir(source_dir)))
@@ -316,16 +334,18 @@ def resample(df, rule, how=RESAMPLE_RULE):
     '''
     Resample OHLC based on given rule.
 
-    Args:
-        df (DataFrame):
-            fx data
-        rule (str):
-            resample frequency
-        how (dict, optional):
-            Default OHLC, see code.
+    Parameters
+    ----------
+    df : DataFrame
+        fx data
+    rule : str
+        resample frequency
+    how : dict, optional
+        Default OHLC, see code.
 
-    Returns:
-        DataFrame
+    Returns
+    -------
+    DataFrame
     '''
     return df.resample(rule=rule).apply(how)
 
@@ -378,23 +398,30 @@ def plot_subset(data, index, offset=10, col='close', title=None):
     '''
     plot a subset of data points around each index value provided.
 
-    Parameters:
-        data : DataFrame
-            data to plot
-        index : list like
-            set of index values to plot, a number of data points before and
-            after each index are also included. Max allowed no. of indices is
-            10.
-        offset : int, optional
-            number of data points before and after the index value to
-            include in the plot.
-        col : str, optional
-            data column to plot. Default is 'close'
-        title : str, optional
-            figure title
+    Parameters
+    ----------
+    data
+        DataFrame
+        data to plot
+    index
+        list like
+        set of index values to plot, a number of data points before and
+        after each index are also included. Max allowed no. of indices is 10.
+    offset
+        int, optional
+        number of data points before and after the index value to
+        include in the plot.
+    col
+        str, optional
+        data column to plot. Default is 'close'
+    title
+        str, optional
+        figure title
 
-    Raises:
-        AssertionError
+    Raises
+    ------
+    AssertionError
+        If any index items is not found in data.index
     '''
 
     # first validate index are all found in data's index
