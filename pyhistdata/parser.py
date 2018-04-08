@@ -489,3 +489,32 @@ def plot_subset_fx(pair, source_dir, index, offset=10, col='close', tz=None):
     '''
     data = load_fx(pair=pair, source_dir=source_dir, verbose=False, tz=tz)
     plot_subset(data, index, offset=offset, col=col)
+
+
+def calc_samples(total_units: int, intervals: int, include_first=True):
+    '''
+    Calculates the number of samples during a given time period, based on
+    fixed interval size.
+
+    Parameters
+    ----------
+    total_units : int
+        Total units of time in period.
+    intervals : int
+        No. of units in one interval.
+    include_first : bool, optional
+        Default True, if an value at starting time is present.
+
+    Returns
+    -------
+    Tuple of two.
+    count : int
+        number of full samples
+    residual : int
+        Any residual tail.
+    '''
+    residual = total_units % intervals
+    count = total_units // intervals
+    if include_first:
+        count += 1
+    return (count, residual)
