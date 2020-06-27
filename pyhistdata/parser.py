@@ -6,6 +6,7 @@ import pytz
 import joblib as job
 import matplotlib.pyplot as plt
 import xarray as xr
+import datetime as dt
 
 
 HEADERS = ['open', 'high', 'low', 'close', 'volume']
@@ -242,7 +243,7 @@ def load_fx_multi(source_dir,
 def conv_tz(dtime, dest_tz):
     if dtime is None:
         return None
-    return pd.datetime.fromtimestamp(dtime.timestamp(), dest_tz)
+    return dt.datetime.fromtimestamp(dtime.timestamp(), dest_tz)
 
 
 def load_fx(pair, source_dir,
